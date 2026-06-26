@@ -1,0 +1,18 @@
+# Core
+numpy>=1.24
+pandas>=2.0
+pyarrow>=12.0          # parquet I/O for the corpus / synthetic data
+
+# Models
+scikit-learn>=1.3      # BallTree (entity resolution), GroupKFold (CV)
+xgboost>=2.0           # XGBRanker (LambdaMART) + XGBClassifier
+
+# Entity resolution
+rapidfuzz>=3.0         # fast fuzzy address/name matching
+
+# Optional: model interpretation (SHAP attribution discussed in METHODOLOGY.md)
+shap>=0.44
+
+# Optional: GPU acceleration (auto-detected; CPU fallback is the default).
+# Install the CuPy build matching your CUDA toolkit, e.g.:
+#   cupy-cuda12x>=12.0

@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.Python
+*.so
+
+# Virtual envs
+.venv/
+venv/
+env/
+ENV/
+
+# Tooling / caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Data -- this repo ships code + a synthetic demo only. Never commit real or
+# generated data. The synthetic generator writes into data/; keep it out of git.
+data/*.parquet
+data/*.csv
+data/*.xlsx
+data/*.log
+
+# Trained model artifacts
+models/
+*.joblib
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
