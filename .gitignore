@@ -28,8 +28,9 @@ data/*.csv
 data/*.xlsx
 data/*.log
 
-# Trained model artifacts
-models/
+# Trained model artifacts (anchored to repo root so it does NOT match the
+# source package src/comp_ranker/models/)
+/models/
 *.joblib
 
 # Editor / OS
