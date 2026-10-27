@@ -14,7 +14,7 @@ Given a subject commercial property and a valuation date, rank the universe of
 candidates by how good a comparable each is. The corpus is ~5.87M unified
 property rows assembled by cross-source entity resolution over three data
 sources (Source A: listings/inventory; Source B: transactions; Source C:
-operating/financial — see the README). Labels are ~219 subjects / ~2,379
+operating/financial; see the README). Labels are ~219 subjects / ~2,379
 subject–comp pairs.
 
 **Labels are expert-selected, not ground truth.** They are the comps an expert
@@ -36,7 +36,7 @@ Three rules govern every comparison:
 2. **Multi-seed CV.** A single panel/top-k read is too noisy here; comparisons
    use the mean over ≥3 seeds. Seed-variance attribution showed the
    negative-sampling draw dominates metric variance (SD ≈ 0.98 pp NDCG@10) over
-   the CV partition (≈ 0.59) and the XGBoost seed (≈ 0.46) — so determinizing
+   the CV partition (≈ 0.59) and the XGBoost seed (≈ 0.46), so determinizing
    the negative draw buys most of the achievable variance reduction.
 
 3. **Closed-set vs full-pool, reported separately, decided on full-pool.**
@@ -52,8 +52,8 @@ Three rules govern every comparison:
    as a relative-comparison tool. (The repo exposes both: `cross_validate` /
    `leave_one_subject_out` for closed-set, `full_pool_diagnostic` for full-pool.)
 
-The gate-first protocol — pre-committing the ship/reject rule *before* running
-an experiment, then applying it mechanically — is what made the reversals below
+The gate-first protocol (pre-committing the ship/reject rule *before* running
+an experiment, then applying it mechanically) is what made the reversals below
 legible rather than ad hoc.
 
 ---
@@ -75,12 +75,12 @@ features beats LambdaMART (`rank:ndcg`) on every measured dimension:
 
 LambdaMART's gradient is computed *pairwise within query groups*. With ~5
 positives + 20 negatives per group across ~160 subjects, the within-group
-pairwise signal sums to ~12K comparisons per pass — a small effective sample
+pairwise signal sums to ~12K comparisons per pass, a small effective sample
 size. The classifier instead treats each of the ~5K training rows as an
 independent labeled example and learns a global row-level score function. At this
 label volume the per-row signal exceeds the within-group pairwise signal, so the
-two-decade web-search consensus ("listwise beats pointwise") — calibrated on
-datasets with thousands of judgments per query — does not transfer.
+two-decade web-search consensus ("listwise beats pointwise"), calibrated on
+datasets with thousands of judgments per query, does not transfer.
 
 The objective-level diagnostic sharpens this. Holding the `XGBRanker`
 formulation fixed and varying only the objective:
@@ -97,8 +97,8 @@ unique winner precisely because it has no group structure at train time.
 
 **SHAP mechanism.** The classifier puts ~60.9% of its attention on
 `distance_miles` (vs the ranker's ~20.4%) and zeros out three features the ranker
-uses. It learns a global "is-this-close-and-similar?" decision rule — winning
-gross discrimination — whereas the ranker spreads attention onto quality features
+uses. It learns a global "is-this-close-and-similar?" decision rule (winning
+gross discrimination), whereas the ranker spreads attention onto quality features
 that are near-constant for thin/heterogeneous types (Office / Lodging / Land),
 which is exactly where it regressed.
 
@@ -106,13 +106,13 @@ which is exactly where it regressed.
 
 ## 4. The closed-set → full-pool reversal (the load-bearing lesson)
 
-Closed-set CV is not merely a weaker signal here — it is *anti-correlated* with
+Closed-set CV is not merely a weaker signal here; it is *anti-correlated* with
 the real full-pool metric for several levers. Three separate reversals were
 observed, each where a closed-set "this helps" signal was falsified at full-pool:
 
 1. **Labeled-corpus refresh.** After a label refresh, closed-set CV said the
    strict type-bounded classifier *regressed* (−4.8%); paired full-pool
-   *overturned* it — top-10 share went 1.60% → 5.11% (3.2×), with every
+   *overturned* it: top-10 share went 1.60% → 5.11% (3.2×), with every
    type-strict classifier strengthening.
 
 2. **Per-type distance-mask.** A closed-set per-feature LOO flagged `distance` as
@@ -127,8 +127,8 @@ observed, each where a closed-set "this helps" signal was falsified at full-pool
 
 **Operating guardrail (now standing):** any "this helps a type / this feature is
 over-weighted" signal observed in closed-set CV **must be full-pool-confirmed
-before it is believed.** Clustered bootstrap (over the shared-signal cluster —
-event/subject — not the row) is used for the per-decision metric CIs, because
+before it is believed.** Clustered bootstrap (over the shared-signal cluster,
+event/subject, not the row) is used for the per-decision metric CIs, because
 decision-level n overstates precision.
 
 ---
@@ -143,8 +143,8 @@ ranker therefore caps at **recall ≈ 0.105**.
 
 Implication: incremental 18-feature *ranking* has a low ceiling on the strict
 retriever; **recall lives in candidate generation**, not in the re-ranker. The
-forward gains are a data/coverage problem — better candidate generation, or more
-labels (especially curated *negative* labels) — not a better re-ranker. A
+forward gains are a data/coverage problem: better candidate generation, or more
+labels (especially curated *negative* labels), not a better re-ranker. A
 learning-curve analysis corroborates that label volume has historically been the
 single biggest lever.
 
@@ -169,19 +169,19 @@ accuracy/recall search at the current label volume. Everything below was tested
 
 | Lever | Result |
 |-------|--------|
-| **Feature width** — 25-feature combined set, average-unit-size, subtype, occupancy stacking, type-distance as a trainable feature, conservative interaction terms | all null |
-| **Batch feature ingestion** (additional financial/physical columns, 11 materialized feature groups) | closed null under both classifier and ranker — the 18-feature width is exhausted |
-| **Hard-negative mining** (retrain with nearby non-comps mined from the classifier's own top-1000) | *catastrophic* — full-pool top-10 share collapses 0.40% → 0.00%, median rank degrades 5×. Label sparsity breaks naive mining: most "hard negatives" are unlabeled-but-comp-like, so the model learns to suppress comp-like features generally |
+| **Feature width**: 25-feature combined set, average-unit-size, subtype, occupancy stacking, type-distance as a trainable feature, conservative interaction terms | all null |
+| **Batch feature ingestion** (additional financial/physical columns, 11 materialized feature groups) | closed null under both classifier and ranker; the 18-feature width is exhausted |
+| **Hard-negative mining** (retrain with nearby non-comps mined from the classifier's own top-1000) | *catastrophic*: full-pool top-10 share collapses 0.40% → 0.00%, median rank degrades 5×. Label sparsity breaks naive mining: most "hard negatives" are unlabeled-but-comp-like, so the model learns to suppress comp-like features generally |
 | **Seed ensembling** | variance-insurance only, no lift |
-| **Monotone constraints** | full-pool reject (3rd reversal — see §4) |
-| **Per-metro routing** | infeasible — no metro has ≥30 labeled subjects |
+| **Monotone constraints** | full-pool reject (3rd reversal, see §4) |
+| **Per-metro routing** | infeasible: no metro has ≥30 labeled subjects |
 | **Negatives-per-subject sweep, MF rebalancing** | null/negative |
-| **Two-stage retrieval** (cheap retriever → shortlist re-ranker) | rejected — *helps* a weak retriever (+0.49 pp) but **hurts** the real strict retriever (0.85% vs 1.72% top-10, CI [−1.48, −0.40], 0/5 seeds). No within-type signal in the 18 features to re-rank on |
-| **Candidate-generation relaxation** (wider radius / broader type filter) | recall *worse* — ranking collapses faster than coverage grows |
-| **Dropping distance / per-type distance-mask** | full-pool reject (2nd reversal — distance is essential) |
+| **Two-stage retrieval** (cheap retriever → shortlist re-ranker) | rejected: *helps* a weak retriever (+0.49 pp) but **hurts** the real strict retriever (0.85% vs 1.72% top-10, CI [−1.48, −0.40], 0/5 seeds). No within-type signal in the 18 features to re-rank on |
+| **Candidate-generation relaxation** (wider radius / broader type filter) | recall *worse*: ranking collapses faster than coverage grows |
+| **Dropping distance / per-type distance-mask** | full-pool reject (2nd reversal: distance is essential) |
 
 The one confirmed *no-new-data* win was a name/address text-similarity feature
-(+0.29 pp top-25, 10 seeds), of which ~40% is lodging brand-name matching — a
+(+0.29 pp top-25, 10 seeds), of which ~40% is lodging brand-name matching, a
 known circularity, so it is offered address-only for lodging.
 
 **Remaining forward paths are all blockers, not levers:** acquire labels
@@ -209,7 +209,7 @@ considered exhausted at this label volume.
 
 The synthetic demo (`examples/demo.py`) plants expert comp sets as "same type,
 same metro, closest by noisy size+age," then runs the real pipeline. It
-reproduces the *qualitative* reversal — the ranker posts higher closed-set NDCG
-while the classifier wins full-pool top-k share by a wide margin — on a tiny
+reproduces the *qualitative* reversal (the ranker posts higher closed-set NDCG
+while the classifier wins full-pool top-k share by a wide margin) on a tiny
 fake corpus. It is **not** a benchmark; the quantitative findings above are from
 the real system and should be read as such.

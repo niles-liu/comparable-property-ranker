@@ -1,17 +1,18 @@
-# comp-ranker — learning-to-rank for comparable commercial properties
+# comp-ranker: learning-to-rank for comparable commercial properties
 
 A learning-to-rank system that, given a subject commercial-real-estate
 property, ranks a large national pool of candidates by how good a
-**comparable ("comp")** each one is — reproducing, and ideally improving on,
+**comparable ("comp")** each one is, reproducing, and ideally improving on,
 the comp set an expert would select. This is the retrieval step underneath any
 valuation or underwriting workflow that begins with "find me the relevant
 comps."
 
 The interesting result here is methodological: **a per-row binary classifier
 beats a LambdaMART listwise ranker at realistic full-pool retrieval, even
-though the ranker wins in closed-set cross-validation** — a closed-set →
-full-pool reversal that turns out to be the load-bearing lesson of the whole
-project. See [`METHODOLOGY.md`](METHODOLOGY.md).
+where a group-aware ranking objective (`rank:pairwise`) is competitive in closed-set
+cross-validation**.
+That closed-set → full-pool reversal turns out to be the load-bearing lesson
+of the whole project. See [`METHODOLOGY.md`](METHODOLOGY.md).
 
 > **Data not included.** The production system is built against a proprietary
 > corpus assembled from three commercial real-estate data sources, which is not
@@ -26,8 +27,8 @@ project. See [`METHODOLOGY.md`](METHODOLOGY.md).
 1. **Assemble a corpus** of ~5.9M unified property rows by resolving the same
    physical building across three independent data sources (cross-source entity
    resolution).
-2. **Ingest expert labels** — the comps an analyst actually selected for a set
-   of subject properties — and resolve them against the corpus.
+2. **Ingest expert labels** (the comps an analyst actually selected for a set
+   of subject properties) and resolve them against the corpus.
 3. **Engineer 18 pairwise features** describing how similar a (subject, comp)
    pair is (distance, size ratio, age, building class, occupancy, submarket…).
 4. **Rank candidates** with one of three models: a rule-based baseline, a
@@ -53,13 +54,13 @@ abbreviated addresses, and slightly different coordinates. **Entity resolution**
 (`comp_ranker.features.entity_resolution`) clusters those records into one row
 per real-world property using a three-tier strategy:
 
-- **Tier 1 — spatial:** a `BallTree` over coordinates links records within ~50 m
+- **Tier 1, spatial:** a `BallTree` over coordinates links records within ~50 m
   (definitive same-building, no text needed; scales to millions of rows without
   O(n²) cost).
-- **Tier 2 — fuzzy address + name:** for near-misses (geocoding error), both the
+- **Tier 2, fuzzy address + name:** for near-misses (geocoding error), both the
   normalized address *and* the property name must clear similarity thresholds
   before a match is declared.
-- **Tier 3 — parcel number:** exact parcel/APN joins are treated as definitive.
+- **Tier 3, parcel number:** exact parcel/APN joins are treated as definitive.
 
 Matched records are unioned into clusters and merged field-by-field by source
 priority (A > B > C for scalar attributes; most-recent for sale dates).
@@ -78,30 +79,31 @@ is 16 base features plus signed/absolute occupancy difference:
   `log_size_ratio`, `size_variance_pct`
 - **Age:** `year_built_diff` / `abs_…`, `year_renovated_diff` / `abs_…`
 - **Quality / context:** `same_bldg_class`, `bldg_class_ord_diff`,
-  `same_submarket`, `same_subtype`, `occupancy_diff` / `abs_occupancy_diff`
+  `same_submarket`, `occupancy_diff` / `abs_occupancy_diff`
 - **Recency:** `sale_recency_years`
-- (plus land-area, stories, and parking-ratio diffs in the wider sets)
+- **Type awareness:** `same_main_type` and ordinal subject/comp type
+  encodings, so a model can learn which cross-type pairings, if any, experts
+  actually accept
+- (plus subtype, land-area, stories, and parking-ratio diffs in the wider sets)
 
-A **cross-type** variant adds three type-awareness features (`same_main_type`,
-ordinal type encodings) so a model can learn which cross-type pairings — if any
-— experts actually accept, and an optional curated `type_distance` feature folds
-in a hand-tuned property-type similarity matrix. Missing values are left as NaN,
-which the tree models handle natively.
+An optional curated `type_distance` feature folds in a hand-tuned property-type
+similarity matrix. Missing values are left as NaN, which the tree models handle
+natively.
 
 ---
 
 ## The models
 
-- **Rule-based baseline** (`comp_ranker.scoring`) — an interpretable comparator.
+- **Rule-based baseline** (`comp_ranker.scoring`): an interpretable comparator.
   Each factor (distance, size, age, class, submarket, recency) starts at 100 and
   loses points as the pair diverges; the composite is a weighted average over
   the factors with data on both sides, with metro-specific distance steps and
   hard pre-filters (radius, same type, size tolerance). Fully vectorized and
   GPU-accelerated (with an automatic CPU fallback) so one subject can be scored
   against a large pool quickly.
-- **LambdaMART ranker** (`XGBRanker`, `objective="rank:ndcg"`) — a listwise
+- **LambdaMART ranker** (`XGBRanker`, `objective="rank:ndcg"`): a listwise
   learning-to-rank model on the 18 features.
-- **XGBoost classifier** (`XGBClassifier`, `binary:logistic`) — a per-row
+- **XGBoost classifier** (`XGBClassifier`, `binary:logistic`): a per-row
   "is this a comp?" model on the *same* 18 features.
 
 ---
@@ -115,10 +117,11 @@ ranker on every measured dimension**:
   validated).
 - **Full-pool (realistic retrieval) top-10 share ≈ 2.2×** the ranker's; top-100
   share ≈ 5.6×; median rank of the true comps compressed from ~46K to ~16K.
-- Critically, **only the classifier survives the full-pool test.** The listwise
-  ranking objectives (`rank:ndcg` / `rank:pairwise` / `rank:map`) can win in
-  closed-set CV but *lose* at realistic ~100K-candidate retrieval. The per-row
-  classifier is the one formulation that extrapolates — because it has no query
+- Critically, **only the classifier survives the full-pool test.** The group-aware
+  ranking objectives (`rank:ndcg` / `rank:pairwise` / `rank:map`) can look
+  competitive in closed-set CV but *lose* at realistic ~100K-candidate
+  retrieval. The per-row classifier is the one formulation that extrapolates,
+  because it has no query
   group structure at training time, every row is an independent labeled example,
   and its row-level decision boundary generalizes across pool sizes.
 - **Mechanism (SHAP):** the classifier learns a near-uniform "is this close /
@@ -129,7 +132,7 @@ ranker on every measured dimension**:
 **Honest framing.** This is a strict improvement for any pre-ranking pipeline,
 not a solved problem: full-pool top-10 share is still small in absolute terms
 (sub-1%). The win is *much better ordering of candidates*, not perfect
-retrieval. And the remaining recall ceiling does not live in the ranker at all —
+retrieval. And the remaining recall ceiling does not live in the ranker at all:
 it lives in **candidate generation** (see below and `METHODOLOGY.md`).
 
 The demo reproduces the *shape* of this reversal on synthetic data: the ranker
@@ -141,7 +144,7 @@ a wide margin.
 ## Evaluation discipline
 
 - **Group-aware splits.** Every train/test split partitions by *subject* (query
-  group), so no subject appears in both — preventing the model from memorizing
+  group), so no subject appears in both, preventing the model from memorizing
   specific properties. The most conservative variant is leave-one-subject-out
   (LOSO), which the headline closed-set numbers are validated against.
 - **Multi-seed CV.** Model comparisons use the mean over multiple seeds, because
@@ -151,7 +154,7 @@ a wide margin.
   candidates); *full-pool* ranks against the entire inference-radius pool
   (10K–250K candidates; median ~100K). These two metrics disagree at large
   magnitude on this data, so every production claim is made on full-pool
-  numbers — closed-set CV is kept only as a relative-comparison tool. This is
+  numbers; closed-set CV is kept only as a relative-comparison tool. This is
   the discipline that surfaced the reversal in the first place.
 
 ---
@@ -160,7 +163,7 @@ a wide margin.
 
 The labels are **expert-selected comparables** drawn from historical
 underwriting / valuation decisions. They reflect **expert selection, not ground
-truth** — they are the comps an expert chose, not a complete, exhaustive set of
+truth**: they are the comps an expert chose, not a complete, exhaustive set of
 all valid comps. Consequently every metric in this project is
 *agreement-with-expert-selection* ("label-relative"), **not** absolute retrieval
 accuracy. The numbers should be read as "how well does the model reproduce
@@ -173,7 +176,7 @@ pairs.
 ## Where the ceiling actually is
 
 A diagnostic reframe (`METHODOLOGY.md`) shows that on the strict retriever, only
-~10.5% of expert-selected comps are even present in the candidate pool — so a
+~10.5% of expert-selected comps are even present in the candidate pool, so a
 *perfect* ranker would cap at recall ≈ 0.105. **Recall is a candidate-generation
 / data-coverage problem, not an 18-feature-ranking problem.** This is the key
 strategic insight: the remaining gains require better candidate generation or
@@ -218,4 +221,4 @@ top-10 picks.
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+MIT. See [`LICENSE`](LICENSE).
